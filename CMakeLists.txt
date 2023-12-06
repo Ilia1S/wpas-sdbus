@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.25)
+project(WpaClient)
+find_package(sdbus-c++ REQUIRED)
+add_executable(wpa_client main.cpp)
+target_link_libraries(wpa_client sdbus-c++)
