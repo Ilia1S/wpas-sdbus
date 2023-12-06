@@ -44,7 +44,7 @@ int main(int argc, char* argv[])
 //    wpas_obj->callMethod("GetInterface").onInterface(WPAS_DBUS_INTERFACE).withArguments(ifname).storeResultsTo(path);
     auto method = wpas_obj->createMethodCall(WPAS_DBUS_INTERFACE, "GetInterface");
     method << ifname;
-    auto path = wpas_obj->callMethod(method);
+    sdbus::MethodReply path = wpas_obj->callMethod(method);
 
     std::cout << path << std::endl;
 /*
