@@ -1,0 +1,47 @@
+#include <systemd/sd-bus.h>
+    
+    const char* ifname = "wlp3s0";
+    sd_bus_error error = SD_BUS_ERROR_NULL;
+    sd_bus_message *m = NULL;
+    sd_bus *bus = NULL;
+    const char *path;
+    int r;
+    r = sd_bus_open_system(&bus);
+    if (r < 0)
+    {
+        fprintf(stderr, "Failed to connect to the system bus: %s\n", strerror(-r));
+        return r;
+    }
+    r = sd_bus_call_method(bus, WPAS_DBUS_SERVICE, WPAS_DBUS_OPATH, WPAS_DBUS_INTERFACE, "GetInterface", &error, &m, "s", ifname);
+    if (r < 0)
+    {
+        fprintf(stderr, "Failed to issue the method call: %s\n", error.message);
+        return r;
+    }
+    r = sd_bus_message_read(m, "o", &path);
+    if (r < 0)
+    {
+        fprintf(stderr, "Failed to parse the response message: %s\n", strerror(-r));
+        return r;
+    }
+    std::cout << "Queued service job as" << path << "\n" << std::endl;
+
+
+
+
+
+Based on the basic layer:
+
+    wpas_obj->registerSignalHandler(WPAS_DBUS_INTERFACES_INTERFACE, "ScanDone", &scanDone);
+    wpas_obj->registerSignalHandler(WPAS_DBUS_INTERFACES_INTERFACE, "PropertiesChanged", &propertiesChanged);
+
+    auto method = wpas_obj->createMethodCall(WPAS_DBUS_INTERFACE, "GetInterface");
+    method << ifname;
+    auto obj = wpas_obj->callMethod(method);
+    obj >> path;
+
+
+
+
+
+

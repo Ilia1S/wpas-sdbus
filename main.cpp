@@ -13,12 +13,12 @@ void listInterfaces()
     std::cout << "Listing interfaces: " << std::endl;
 }
 
-void propertiesChanged(sdbus::Signal& properties)
+void propertiesChanged(std::string)
 {
     std::cout << "Properties changed: " << std::endl;
 }
 
-void scanDone(sdbus::Signal& success)
+void scanDone(std::string)
 {
     std::cout << "Scan done." << std::endl;
 }
@@ -36,17 +36,16 @@ int main(int argc, char* argv[])
     } */
 
     // Subscribe for the signals
-    wpas_obj->registerSignalHandler(WPAS_DBUS_INTERFACES_INTERFACE, "ScanDone", &scanDone);
-//    wpas_obj->registerSignalHandler(WPAS_DBUS_INTERFACES_INTERFACE, "PropertiesChanged", &propertiesChanged);
+    wpas_obj->uponSignal("ScanDone").onInterface(WPAS_DBUS_INTERFACES_INTERFACE).call([](const std::string& str){ scanDone(str); });
+    wpas_obj->uponSignal("PropertiesChanged").onInterface(WPAS_DBUS_INTERFACES_INTERFACE).call([](const std::string& str){ propertiesChanged(str); });
     wpas_obj->finishRegistration();
-    std::string ifname = "wlp3s0"; // to be edited
-//    std::string path;
-//    wpas_obj->callMethod("GetInterface").onInterface(WPAS_DBUS_INTERFACE).withArguments(ifname).storeResultsTo(path);
-    auto method = wpas_obj->createMethodCall(WPAS_DBUS_INTERFACE, "GetInterface");
-    method << ifname;
-    sdbus::MethodReply path = wpas_obj->callMethod(method);
 
-    std::cout << path << std::endl;
+    // Invoke GetInterface method to obtain the D-Bus path to an object related to an interface
+    std::string ifname = "wlp3s0"; // to be edited
+    sdbus::ObjectPath path;
+    wpas_obj->callMethod("GetInterface").onInterface(WPAS_DBUS_INTERFACE).withArguments(ifname).storeResultsTo(path);
+
+//    std::cout << path << std::endl;
 /*
     auto if_obj = sdbus::createProxy(WPAS_DBUS_SERVICE, path);
 
