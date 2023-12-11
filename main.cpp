@@ -1,5 +1,6 @@
 #include <iomanip>
 #include <iostream>
+#include <unistd.h>
 #include <sdbus-c++/sdbus-c++.h>
 
 const std::string WPAS_DBUS_SERVICE = "fi.w1.wpa_supplicant1";
@@ -13,10 +14,33 @@ const std::string WPAS_DBUS_BSS_INTERFACE = "fi.w1.wpa_supplicant1.BSS";
 
 std::unique_ptr<sdbus::IProxy> if_obj;
 
-void propertiesChanged(const std::map<std::string, sdbus::Variant>& );
-void showBss(const std::string& );
-void scanDone(const bool& );
-const std::string getCurrentTime();
+void propertiesChanged(const std::map<std::string, sdbus::Variant>& ); // PropertiesChanged signal handler
+void showBss(const std::string& ); // show BSSs after scanning
+void scanDone(const bool& ); // ScanDone signal handler
+const std::string getCurrentTime(); // get the current time
+const std::string getPath(std::unique_ptr<sdbus::IProxy>& wpas_obj,
+                               const std::string& ifname); // obtain the D-Bus path
+
+void propertiesChanged(const std::map<std::string, sdbus::Variant>& propDict)
+{
+    static std::string prevState = if_obj->getProperty("State")
+        .onInterface(WPAS_DBUS_INTERFACES_INTERFACE);
+    for (char& c : prevState)
+            c = std::toupper(c);
+
+    if (propDict.count("State") > 0)
+    {
+        
+        const std::string currentTime = getCurrentTime();
+        std::string newState = propDict.at("State").get<std::string>();
+        for (char& c : newState)
+            c = std::toupper(c);
+
+        std::cout << "|" << currentTime << "| [WLANSTATE] ::" << prevState 
+                  << " -> " << newState << std::endl;
+        prevState = newState;
+    }
+}
 
 void scanDone(const bool& success)
 {
@@ -35,22 +59,22 @@ void showBss(const std::string& bss)
 {
     std::unique_ptr<sdbus::IProxy> net_obj = 
         sdbus::createProxy(WPAS_DBUS_SERVICE, bss);
-    std::vector<uint8_t> bssid_orig;
-    bssid_orig = net_obj->getProperty("BSSID")
+    std::vector<uint8_t> bssidOrig;
+    bssidOrig = net_obj->getProperty("BSSID")
         .onInterface(WPAS_DBUS_BSS_INTERFACE);
     std::stringstream ss;
     ss << std::hex << std::setfill('0');
-    for (const auto& item : bssid_orig)
+    for (const auto& item : bssidOrig)
     {
         ss << std::setw(2) << static_cast<int>(item);
         ss << ":";
     }
     std::string bssid = ss.str();
     bssid.pop_back();
-    std::vector<uint8_t> ssid_orig;
-    ssid_orig = net_obj->getProperty("SSID")
+    std::vector<uint8_t> ssidOrig;
+    ssidOrig = net_obj->getProperty("SSID")
         .onInterface(WPAS_DBUS_BSS_INTERFACE);
-    std::string ssid(ssid_orig.begin(), ssid_orig.end());
+    std::string ssid(ssidOrig.begin(), ssidOrig.end());
     uint16_t freq;
     freq = net_obj->getProperty("Frequency")
         .onInterface(WPAS_DBUS_BSS_INTERFACE);
@@ -83,28 +107,70 @@ const std::string getCurrentTime()
     return timeString;
 }
 
+const std::string getPath(std::unique_ptr<sdbus::IProxy>& wpas_obj,
+                               const std::string& ifname)
+{
+    std::string path;
+    try
+    {
+        sdbus::ObjectPath objPath;
+        wpas_obj->callMethod("GetInterface")
+            .onInterface(WPAS_DBUS_INTERFACE)
+            .withArguments(ifname)
+            .storeResultsTo(objPath);
+        path = objPath.c_str();
+    }
+    catch (const sdbus::Error& exc)
+    {
+        std::string errorMessageU = exc.what();
+        std::cout << errorMessageU << std::endl;
+        if (errorMessageU.find\
+        ("[fi.w1.wpa_supplicant1.InterfaceUnknown]") == std::string::npos)
+            throw exc;
+        try
+        {
+            {
+                sdbus::ObjectPath objPath;
+                std::map<std::string, sdbus::Variant> crIntDict;
+                crIntDict["Ifname"] = sdbus::Variant(ifname);
+                crIntDict["Driver"] = sdbus::Variant("test");
+                wpas_obj->callMethod("CreateInterface")
+                    .onInterface(WPAS_DBUS_INTERFACE)
+                    .withArguments(crIntDict)
+                    .storeResultsTo(objPath);
+                    path = objPath.c_str();
+                sleep(1);
+            }
+        }
+        catch (const sdbus::Error& exc)
+        {
+            std::string errorMessageE = exc.what();
+            if (errorMessageE.find\
+            ("[fi.w1.wpa_supplicant1.InterfaceExists]") == std::string::npos)
+                throw exc;
+        }
+    }
+    return path;
+}
+
 int main(int argc, char* argv[])
 {
     // Create a D-Bus connection to the system bus and requests name on it
     auto connection = sdbus::createSystemBusConnection();
-    // Create a proxy object
-    std::unique_ptr<sdbus::IProxy> wpas_obj = 
-        sdbus::createProxy(WPAS_DBUS_SERVICE, WPAS_DBUS_OPATH);
+    // Create a proxy object for WPAS_DBUS_SERVICE and WPAS_DBUS_OPATH
+    std::unique_ptr<sdbus::IProxy> wpas_obj;
+    wpas_obj = sdbus::createProxy(WPAS_DBUS_SERVICE, WPAS_DBUS_OPATH);
     // Check if Ifname is specified, eg. wlp3s0
     if (argc != 2)
     {
         std::cout << "Error. Specify your Ifname" << std::endl;
-        return -1;
+        return 1;
     }
     std::string ifname = argv[1];
-    // Invoke GetInterface method to obtain the D-Bus path
-    sdbus::ObjectPath obj_path;
-    wpas_obj->callMethod("GetInterface")
-        .onInterface(WPAS_DBUS_INTERFACE)
-        .withArguments(ifname)
-        .storeResultsTo(obj_path);
-    std::string path = obj_path.c_str();
-
+    // Invoke getPath method to obtain the D-Bus path
+    // and see if wpa_supplicant already knows about this interface
+    const std::string path = getPath(wpas_obj, ifname);
+    // Create a proxy object for WPAS_DBUS_SERVICE and path
     if_obj = sdbus::createProxy(WPAS_DBUS_SERVICE, path);
     // Subscribe for the signals
     if_obj->uponSignal("ScanDone")
@@ -118,11 +184,10 @@ int main(int argc, char* argv[])
     std::map<std::string, sdbus::Variant> scanDict;
     scanDict["Type"] = sdbus::Variant("active");
     // Invoke Scan method to trigger a scan
-    auto method = 
-        if_obj->createMethodCall(WPAS_DBUS_INTERFACES_INTERFACE, "Scan");
-    method << scanDict;
-    if_obj->callMethod(method);
-
+    if_obj->callMethod("Scan")
+        .onInterface(WPAS_DBUS_INTERFACES_INTERFACE)
+        .withArguments(scanDict)
+        .storeResultsTo();
     // Run the loop on the connection
     connection->enterEventLoop();
 
