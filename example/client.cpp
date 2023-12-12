@@ -17,6 +17,7 @@ int main(int argc, char *argv[])
     // Create proxy object for the concatenator object on the server side. Since here
     // we are creating the proxy instance without passing connection to it, the proxy
     // will create its own connection automatically, and it will be system bus connection.
+
     const char* destinationName = "org.sdbuscpp.concatenator";
     const char* objectPath = "/org/sdbuscpp/concatenator";
     auto concatenatorProxy = sdbus::createProxy(destinationName, objectPath);
@@ -36,7 +37,7 @@ int main(int argc, char *argv[])
         auto reply = concatenatorProxy->callMethod(method);
         std::string result;
         reply >> result;
-        assert(result == "1:2:3");    
+        assert(result == "1:2:3");
     }
 
     // Invoke concatenate again, this time with no numbers and we shall get an error

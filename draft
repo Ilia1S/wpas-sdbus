@@ -1,3 +1,5 @@
+target_link_libraries(wpa_client systemd)
+
 #include <systemd/sd-bus.h>
     
     const char* ifname = "wlp3s0";
@@ -31,10 +33,12 @@
 
 
 Based on the basic layer:
-
+    auto wpas_obj = sdbus::createProxy(WPAS_DBUS_SERVICE, WPAS_DBUS_OPATH);
     wpas_obj->registerSignalHandler(WPAS_DBUS_INTERFACES_INTERFACE, "ScanDone", &scanDone);
     wpas_obj->registerSignalHandler(WPAS_DBUS_INTERFACES_INTERFACE, "PropertiesChanged", &propertiesChanged);
+    wpas_obj->finishRegistration();
 
+    sdbus::ObjectPath path;
     auto method = wpas_obj->createMethodCall(WPAS_DBUS_INTERFACE, "GetInterface");
     method << ifname;
     auto obj = wpas_obj->callMethod(method);
@@ -42,6 +46,13 @@ Based on the basic layer:
 
 
 
-
+WPA:
+    std::map<std::string, sdbus::Variant> wpa;
+    wpa = net_obj->getProperty("WPA")
+        .onInterface(WPAS_DBUS_BSS_INTERFACE);
+    if (wpa.count("KeyMgmt") > 0)
+        std::string wpaS = "yes";
+    else
+        std::string wpaS = "no";
 
 
